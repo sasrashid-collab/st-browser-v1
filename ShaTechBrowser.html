@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ku" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShaTech Browser Pro</title>
+    <style>
+        :root { --p: #8e44ad; --b: #0b0b0b; }
+        body { margin: 0; background: var(--b); font-family: sans-serif; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Login screen */
+        #lck { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .box { border: 1px solid var(--p); padding: 30px; border-radius: 20px; text-align: center; background: #111; width: 280px; }
+        
+        /* Browser UI */
+        #main { display: none; flex-direction: column; height: 100%; }
+        .bar { background: #1a1a1a; padding: 10px; display: flex; gap: 8px; border-bottom: 2px solid var(--p); align-items: center; }
+        input { flex: 1; padding: 10px; border-radius: 20px; border: 1px solid #333; background: #000; color: #0f0; outline: none; }
+        
+        .btn { background: var(--p); color: #fff; border: none; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .btn-alt { background: #333; font-size: 10px; }
+        
+        iframe { flex: 1; border: none; background: white; }
+    </style>
+</head>
+<body>
+
+    <div id="lck">
+        <div class="box">
+            <h2 style="color:var(--p); margin-bottom:20px;">ShaTech Access</h2>
+            <input type="password" id="ps" placeholder="پاسوۆرد">
+            <button class="btn" onclick="v()" style="width:100%; margin-top:10px;">Login</button>
+        </div>
+    </div>
+
+    <div id="main">
+        <div class="bar">
+            <input type="text" id="url" placeholder="لێرە بنووسە: google.com">
+            <button class="btn" onclick="go()">بڕۆ</button>
+            <button class="btn btn-alt" onclick="ext()">دەرەوە ↗</button>
+        </div>
+        <iframe id="f" src="about:blank"></iframe>
+    </div>
+
+    <script>
+        const _k = "MTIzNA=="; // Password: 1234
+
+        function v() {
+            if (btoa(document.getElementById('ps').value) === _k) {
+                document.getElementById('lck').style.display = 'none';
+                document.getElementById('main').style.display = 'flex';
+            } else { alert("هەڵەیە!"); }
+        }
+
+        function go() {
+            let u = document.getElementById('url').value;
+            if(!u.includes('.')) u = 'https://www.google.com/search?q=' + u;
+            else if(!u.startsWith('http')) u = 'https://' + u;
+            document.getElementById('f').src = u;
+        }
+
+        function ext() {
+            const u = document.getElementById('f').src;
+            if(u !== 'about:blank') window.open(u, '_blank');
+        }
+
+        document.getElementById('ps').onkeypress = (e) => { if(e.key==='Enter') v(); };
+        document.getElementById('url').onkeypress = (e) => { if(e.key==='Enter') go(); };
+    </script>
+</body>
+</html>
