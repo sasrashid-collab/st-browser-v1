@@ -1,48 +1,125 @@
 <!DOCTYPE html>
 <html lang="ku" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShaTech Browser</title>
-    <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #lock { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .box { border: 1px solid #8e44ad; padding: 30px; border-radius: 15px; text-align: center; }
-        input { padding: 10px; border-radius: 20px; border: 1px solid #333; background: #111; color: #fff; width: 200px; text-align: center; outline: none; }
-        button { background: #8e44ad; color: #fff; border: none; padding: 10px 25px; border-radius: 20px; cursor: pointer; margin-top: 10px; font-weight: bold; }
-        #browser { display: none; flex-direction: column; height: 100%; }
-        .bar { background: #111; padding: 10px; display: flex; gap: 10px; border-bottom: 2px solid #8e44ad; }
-        iframe { flex: 1; border: none; background: #fff; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShaTech Browser</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    .hidden { display: none !important; }
+    #lock { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .box { border: 1px solid #8e44ad; padding: 30px; border-radius: 15px; text-align: center; }
+    input { padding: 10px; border-radius: 20px; border: 1px solid #333; background: #111; color: #fff; width: 200px; text-align: center; outline: none; }
+    button { background: #8e44ad; color: #fff; border: none; padding: 10px 25px; border-radius: 20px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+    #browser { display: none; flex-direction: column; height: 100%; }
+    .bar { background: #111; padding: 10px; display: flex; gap: 10px; border-bottom: 2px solid #8e44ad; align-items: center; }
+    iframe { flex: 1; border: none; background: #fff; height: calc(100vh - 64px); }
+    #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; background: rgba(0,0,0,0.85); color: #fff; padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity 180ms; pointer-events: none; z-index: 200; }
+    #toast.show { opacity: 1; pointer-events: auto; }
+    #loader { width: 18px; height: 18px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.15); border-top-color: #8e44ad; animation: spin 1s linear infinite; display:inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
-    <div id="lock">
-        <div class="box">
-            <h2 style="color:#8e44ad">ShaTech Browser</h2>
-            <input type="password" id="pass" placeholder="Password">
-            <br>
-            <button onclick="check()">Open</button>
-        </div>
+  <div id="lock">
+    <div class="box">
+      <h2 style="color:#8e44ad">ShaTech Browser</h2>
+      <input type="password" id="pass" placeholder="Password">
+      <br>
+      <button id="openBtn">Open</button>
     </div>
-    <div id="browser">
-        <div class="bar">
-            <input type="text" id="url" style="flex:1; text-align:left;" placeholder="https://google.com">
-            <button onclick="go()">Go</button>
-        </div>
-        <iframe id="frame"></iframe>
+  </div>
+
+  <div id="browser" class="hidden">
+    <div class="bar">
+      <input type="text" id="url" style="flex:1; text-align:left;" placeholder="https://google.com">
+      <button id="goBtn">Go</button>
+      <div id="spinner" class="hidden" aria-hidden="true" style="margin-left:8px;"><span id="loader"></span></div>
     </div>
-    <script>
-        function check() {
-            if(document.getElementById('pass').value === "1234") {
-                document.getElementById('lock').style.display = 'none';
-                document.getElementById('browser').style.display = 'flex';
-            } else { alert("هەڵەیە!"); }
+    <iframe id="frame" sandbox="allow-scripts allow-forms" loading="lazy" title="ShaTech Frame"></iframe>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // Cached elements
+    const lockEl = document.getElementById('lock');
+    const browserEl = document.getElementById('browser');
+    const passEl = document.getElementById('pass');
+    const urlEl = document.getElementById('url');
+    const frame = document.getElementById('frame');
+    const openBtn = document.getElementById('openBtn');
+    const goBtn = document.getElementById('goBtn');
+    const toast = document.getElementById('toast');
+    const spinner = document.getElementById('spinner');
+
+    // Toast helper (non-blocking)
+    let toastTimer = null;
+    function showToast(msg, ms = 3000) {
+      clearTimeout(toastTimer);
+      toast.textContent = msg;
+      toast.classList.add('show');
+      toastTimer = setTimeout(() => toast.classList.remove('show'), ms);
+    }
+
+    // Simple auth (demo)
+    openBtn.addEventListener('click', () => {
+      if (passEl.value === "1234") {
+        lockEl.classList.add('hidden');
+        browserEl.classList.remove('hidden');
+      } else {
+        showToast('هەڵەیە!'); // invalid
+      }
+    });
+
+    // Navigation state
+    let navigating = false;
+
+    function setLoading(on) {
+      navigating = Boolean(on);
+      goBtn.disabled = on;
+      spinner.classList.toggle('hidden', !on);
+    }
+
+    // Validate and normalize URL
+    function normalizeUrl(input) {
+      let u = (input || '').trim();
+      if (!u) throw new Error('empty');
+      // if no scheme, assume https
+      if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(u)) u = 'https://' + u;
+      const parsed = new URL(u);
+      return parsed.href;
+    }
+
+    async function go() {
+      if (navigating) return; // debounce
+      try {
+        const href = normalizeUrl(urlEl.value);
+        setLoading(true);
+        frame.src = href;
+        // wait for load or error to stop loading indicator
+        const onLoad = () => { cleanup(); };
+        const onError = () => { showToast('وێبگەیەک هەڵە (load error)'); cleanup(); };
+        function cleanup() {
+          frame.removeEventListener('load', onLoad);
+          frame.removeEventListener('error', onError);
+          setLoading(false);
         }
-        function go() {
-            let u = document.getElementById('url').value;
-            if(!u.startsWith('http')) u = 'https://' + u;
-            document.getElementById('frame').src = u;
-        }
-    </script>
+        frame.addEventListener('load', onLoad);
+        frame.addEventListener('error', onError);
+      } catch (e) {
+        showToast('URL دروست نییە');
+        setLoading(false);
+      }
+    }
+
+    goBtn.addEventListener('click', go);
+    urlEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+    // Accessibility: focus URL after opening browser
+    openBtn.addEventListener('click', () => {
+      setTimeout(() => urlEl.focus(), 200);
+    });
+  </script>
 </body>
 </html>
