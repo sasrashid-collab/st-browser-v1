@@ -5,44 +5,167 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ShaTech Browser</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #lock { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .box { border: 1px solid #8e44ad; padding: 30px; border-radius: 15px; text-align: center; }
-        input { padding: 10px; border-radius: 20px; border: 1px solid #333; background: #111; color: #fff; width: 200px; text-align: center; outline: none; }
-        button { background: #8e44ad; color: #fff; border: none; padding: 10px 25px; border-radius: 20px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        :root{--accent:#8e44ad;--bg:#000;--panel:#111;--muted:#ccc}
+        html,body{height:100%;}
+        body { margin: 0; background: var(--bg); color: #fff; font-family: system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; display: flex; flex-direction: column; height: 100vh; }
+        #lock { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .box { border: 1px solid var(--accent); padding: 30px; border-radius: 15px; text-align: center; background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent); }
+        input[type="password"], input[type="text"] { padding: 10px; border-radius: 20px; border: 1px solid #333; background: #0f0f0f; color: #fff; width: 220px; text-align: center; outline: none; }
+        button { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 12px; cursor: pointer; margin-left: 6px; font-weight: 600; }
+        button.icon { padding: 8px 10px; border-radius: 10px; background: #222; }
         #browser { display: none; flex-direction: column; height: 100%; }
-        .bar { background: #111; padding: 10px; display: flex; gap: 10px; border-bottom: 2px solid #8e44ad; }
-        iframe { flex: 1; border: none; background: #fff; }
+        .bar { background: var(--panel); padding: 8px; display: flex; gap: 8px; align-items: center; border-bottom: 2px solid var(--accent); }
+        .bar .group { display:flex; gap:8px; align-items:center; }
+        #url { flex:1; min-width:120px; direction:ltr; text-align:left; }
+        iframe { flex: 1; border: none; background: #fff; width:100%; height:100%; }
+        #status { font-size: 13px; color:var(--muted); padding:8px 12px; background:transparent; border-top:1px solid rgba(255,255,255,0.03); }
+        .spinner{ width:16px;height:16px;border:2px solid rgba(255,255,255,0.08);border-top-color:var(--accent);border-radius:50%; animation:spin 1s linear infinite; display:inline-block; vertical-align:middle}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        /* responsive */
+        @media (max-width:480px){ .box{ padding:20px } input[type="password"]{width:160px} button{padding:8px 10px} }
     </style>
 </head>
 <body>
-    <div id="lock">
-        <div class="box">
-            <h2 style="color:#8e44ad">ShaTech Browser</h2>
-            <input type="password" id="pass" placeholder="Password">
-            <br>
-            <button onclick="check()">Open</button>
+    <div id="lock" aria-hidden="false">
+        <div class="box" role="dialog" aria-label="ShaTech Browser lock">
+            <h2 style="color:var(--accent);margin:0 0 12px 0">ShaTech Browser</h2>
+            <input type="password" id="pass" placeholder="Password" aria-label="password">
+            <br><br>
+            <button id="unlock">کردنەوە</button>
+            <div id="lock-message" style="color:#ff7675;margin-top:8px;min-height:18px"></div>
         </div>
     </div>
-    <div id="browser">
-        <div class="bar">
-            <input type="text" id="url" style="flex:1; text-align:left;" placeholder="https://google.com">
-            <button onclick="go()">Go</button>
+
+    <div id="browser" aria-hidden="true">
+        <div class="bar" role="toolbar">
+            <div class="group">
+                <button class="icon" id="btn-back" title="وەکو پێش">◀</button>
+                <button class="icon" id="btn-forward" title="دوای">▶</button>
+                <button class="icon" id="btn-reload" title="نوێکردنەوە">⟳</button>
+                <button class="icon" id="btn-home" title="ماڵ">🏠</button>
+            </div>
+            <input type="text" id="url" placeholder="https://google.com" aria-label="url">
+            <button id="btn-go">چوونە ژوورەوە</button>
+            <button id="btn-newtab" title="کردنەوە لە تابەکی نوێ">🔗</button>
         </div>
-        <iframe id="frame"></iframe>
+
+        <iframe id="frame" sandbox="allow-scripts allow-forms allow-popups allow-same-origin" title="ShaTech frame"></iframe>
+        <div id="status" aria-live="polite">ئامادە</div>
     </div>
+
     <script>
-        function check() {
-            if(document.getElementById('pass').value === "1234") {
-                document.getElementById('lock').style.display = 'none';
-                document.getElementById('browser').style.display = 'flex';
-            } else { alert("هەڵەیە!"); }
+        // Simple client-side demo password — for a real app do NOT put secrets in client JS.
+        const PASSWORD = '1234';
+        const DEFAULT_HOME = 'https://www.google.com';
+
+        const lockEl = document.getElementById('lock');
+        const browserEl = document.getElementById('browser');
+        const passInput = document.getElementById('pass');
+        const unlockBtn = document.getElementById('unlock');
+        const lockMessage = document.getElementById('lock-message');
+
+        const urlInput = document.getElementById('url');
+        const frame = document.getElementById('frame');
+        const status = document.getElementById('status');
+
+        const btnBack = document.getElementById('btn-back');
+        const btnForward = document.getElementById('btn-forward');
+        const btnReload = document.getElementById('btn-reload');
+        const btnHome = document.getElementById('btn-home');
+        const btnGo = document.getElementById('btn-go');
+        const btnNew = document.getElementById('btn-newtab');
+
+        // history managed in parent so we can navigate cross-origin safely
+        let historyStack = [];
+        let historyIndex = -1;
+
+        function showLockError(msg){ lockMessage.textContent = msg; }
+
+        function openBrowser(){
+            lockEl.style.display = 'none';
+            lockEl.setAttribute('aria-hidden','true');
+            browserEl.style.display = 'flex';
+            browserEl.setAttribute('aria-hidden','false');
+            urlInput.focus();
+            goTo(DEFAULT_HOME, true);
         }
-        function go() {
-            let u = document.getElementById('url').value;
-            if(!u.startsWith('http')) u = 'https://' + u;
-            document.getElementById('frame').src = u;
+
+        function checkPassword(){
+            if(passInput.value === PASSWORD){
+                openBrowser();
+            } else {
+                showLockError('تێبینی: نهێنەوشە هەڵەیە');
+            }
         }
+
+        unlockBtn.addEventListener('click', checkPassword);
+        passInput.addEventListener('keydown', e => { if(e.key === 'Enter') checkPassword(); });
+
+        function sanitizeUrl(u){
+            if(!u) return '';
+            u = u.trim();
+            // if it's something like 'example.com' add https
+            if(!/^https?:\/\//i.test(u)) u = 'https://' + u;
+            try{ const parsed = new URL(u); return parsed.href; } catch(e){ return null; }
+        }
+
+        function goTo(raw, addToHistory = true){
+            const u = sanitizeUrl(raw || '');
+            if(!u){ status.textContent = 'هەڵە: URL دروست نییە'; return; }
+            // if adding to history, drop any forward history
+            if(addToHistory){
+                historyStack = historyStack.slice(0, historyIndex+1);
+                historyStack.push(u);
+                historyIndex = historyStack.length - 1;
+            }
+            setIframeSrc(u);
+            updateControls();
+        }
+
+        function setIframeSrc(u){
+            status.innerHTML = '<span class="spinner"></span> بارکردن...';
+            // assign src — reloads content
+            frame.src = u;
+            urlInput.value = u;
+        }
+
+        // Navigation using our history array (cannot access iframe internal history reliably cross-origin)
+        function goBack(){ if(historyIndex > 0){ historyIndex--; setIframeSrc(historyStack[historyIndex]); updateControls(); } }
+        function goForward(){ if(historyIndex < historyStack.length - 1){ historyIndex++; setIframeSrc(historyStack[historyIndex]); updateControls(); } }
+        function reloadPage(){ if(historyIndex >= 0) setIframeSrc(historyStack[historyIndex]); else setIframeSrc(urlInput.value || DEFAULT_HOME); }
+        function goHome(){ goTo(DEFAULT_HOME, true); }
+        function openNewTab(){ const u = sanitizeUrl(urlInput.value || DEFAULT_HOME); if(u) window.open(u, '_blank'); }
+
+        function updateControls(){
+            btnBack.disabled = historyIndex <= 0;
+            btnForward.disabled = historyIndex >= historyStack.length - 1 || historyIndex === -1;
+        }
+
+        // wire buttons
+        btnGo.addEventListener('click', () => goTo(urlInput.value, true));
+        btnBack.addEventListener('click', goBack);
+        btnForward.addEventListener('click', goForward);
+        btnReload.addEventListener('click', reloadPage);
+        btnHome.addEventListener('click', goHome);
+        btnNew.addEventListener('click', openNewTab);
+
+        // enter key in url field
+        urlInput.addEventListener('keydown', e => { if(e.key === 'Enter') goTo(urlInput.value, true); });
+
+        // update status when iframe loads or errors
+        frame.addEventListener('load', () => {
+            status.textContent = 'بەسەرکەوتوویی بارکرا';
+            // try to update url to current iframe location if same-origin
+            try{ const loc = frame.contentWindow.location.href; if(loc) urlInput.value = loc; } catch(e){ /* cross-origin — ignore */ }
+            updateControls();
+        });
+
+        // initial state
+        updateControls();
+
+        // accessibility: if user presses Escape while locked, clear password
+        document.addEventListener('keydown', e => { if(e.key === 'Escape' && lockEl.style.display !== 'none'){ passInput.value = ''; showLockError(''); } });
+
     </script>
 </body>
 </html>
