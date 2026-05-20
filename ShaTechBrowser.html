@@ -10,7 +10,7 @@
         body { margin: 0; background: var(--bg); color: #fff; font-family: system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; display: flex; flex-direction: column; height: 100vh; }
         #lock { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 100; }
         .box { border: 1px solid var(--accent); padding: 30px; border-radius: 15px; text-align: center; background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent); }
-        input[type="password"], input[type="text"] { padding: 10px; border-radius: 20px; border: 1px solid #333; background: #0f0f0f; color: #fff; width: 220px; text-align: center; outline: none; }
+        input[type="password"], input[type="text"], textarea { padding: 10px; border-radius: 20px; border: 1px solid #333; background: #0f0f0f; color: #fff; width: 220px; text-align: center; outline: none; }
         button { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 12px; cursor: pointer; margin-left: 6px; font-weight: 600; }
         button.icon { padding: 8px 10px; border-radius: 10px; background: #222; }
         #browser { display: none; flex-direction: column; height: 100%; }
@@ -21,8 +21,20 @@
         #status { font-size: 13px; color:var(--muted); padding:8px 12px; background:transparent; border-top:1px solid rgba(255,255,255,0.03); }
         .spinner{ width:16px;height:16px;border:2px solid rgba(255,255,255,0.08);border-top-color:var(--accent);border-radius:50%; animation:spin 1s linear infinite; display:inline-block; vertical-align:middle}
         @keyframes spin{to{transform:rotate(360deg)}}
-        /* responsive */
-        @media (max-width:480px){ .box{ padding:20px } input[type="password"]{width:160px} button{padding:8px 10px} }
+        /* Chat overlay */
+        #chatOverlay{ position: fixed; right: 16px; bottom: 16px; width: 420px; max-width: calc(100% - 32px); height: 520px; background: #070707; border:1px solid #222; border-radius:10px; z-index: 200; display:none; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.6); }
+        #chatHeader{ padding:10px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.03); }
+        #chatBody{ padding:10px; flex:1; overflow:auto; }
+        #chatFooter{ padding:10px; border-top:1px solid rgba(255,255,255,0.03); }
+        .chat-textarea{ width:100%; height:84px; padding:8px; background:#0b0b0b; color:#fff; border-radius:6px; border:1px solid #222; resize:vertical }
+        .chat-log{ height:180px; overflow:auto; border:1px solid #111; padding:8px; border-radius:6px; background:#060606 }
+        .msg{padding:6px;border-radius:6px;margin-bottom:6px}
+        .me{background:#1f1f3a;text-align:right}
+        .peer{background:#262626}
+        .small{font-size:12px;color:#bbb}
+        .controls{display:flex;gap:6px;align-items:center}
+        .langSelect{background:#0f0f0f;color:#fff;border:1px solid #222;padding:6px;border-radius:6px}
+        @media(max-width:480px){ #chatOverlay{ right:8px; left:8px; width:auto; height:480px } }
     </style>
 </head>
 <body>
@@ -47,17 +59,75 @@
             <input type="text" id="url" placeholder="https://google.com" aria-label="url">
             <button id="btn-go">چوونە ژوورەوە</button>
             <button id="btn-newtab" title="کردنەوە لە تابەکی نوێ">🔗</button>
+            <button id="btn-chat" title="Chat" style="margin-left:6px">💬 Chat</button>
         </div>
 
         <iframe id="frame" sandbox="allow-scripts allow-forms allow-popups allow-same-origin" title="ShaTech frame"></iframe>
         <div id="status" aria-live="polite">ئامادە</div>
     </div>
 
+    <!-- Chat overlay: manual WebRTC signaling (copy/paste) to keep everything P2P with no server storage -->
+    <div id="chatOverlay" role="dialog" aria-label="P2P Chat">
+      <div id="chatHeader">
+        <div style="flex:1">
+          <strong id="chatTitle">P2P Chat</strong>
+          <div class="small" id="chatSub">چات بێ سروەر — copy/paste signaling</div>
+        </div>
+        <select id="chatLang" class="langSelect">
+          <option value="ku">کوردی</option>
+          <option value="ar">عەرەبی</option>
+          <option value="en">English</option>
+        </select>
+        <button id="chatClose" class="ghost" style="background:#222;padding:6px;border-radius:8px;color:#fff">✕</button>
+      </div>
+      <div id="chatBody">
+        <div class="small" id="chatInstr">Instructions...</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="flex:1">
+            <label class="small">Local (copy & send)</label>
+            <textarea id="localOffer" class="chat-textarea" placeholder="Create Offer then copy this text"></textarea>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button id="createOffer">Create Offer</button>
+              <button id="createAnswer" class="ghost" style="background:#333">Create Answer</button>
+              <button id="exportState" class="ghost" style="background:#333">Export</button>
+            </div>
+          </div>
+          <div style="width:12px"></div>
+          <div style="flex:1">
+            <label class="small">Remote (paste other's text)</label>
+            <textarea id="remoteOffer" class="chat-textarea" placeholder="Paste remote offer/answer & ICE here"></textarea>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button id="setRemote" class="ghost" style="background:#333">Set Remote</button>
+              <button id="clearAll" class="ghost" style="background:#8b0000">Clear Chat</button>
+            </div>
+          </div>
+        </div>
+
+        <hr style="border-color:#111;margin:10px 0" />
+
+        <div class="chat-log" id="log"></div>
+      </div>
+      <div id="chatFooter">
+        <div style="display:flex;gap:8px">
+          <input id="msg" type="text" placeholder="Type message..." style="flex:1;border-radius:8px;padding:8px;background:#0b0b0b;border:1px solid #222;color:#fff" />
+          <button id="send">Send</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px">
+          <div class="small">Status: <span id="connStatus">idle</span></div>
+          <div>
+            <button id="copyLog" class="ghost" style="background:#333">Copy Log</button>
+            <button id="saveName" class="ghost" style="background:#333">Save name</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
-        // Simple client-side demo password — for a real app do NOT put secrets in client JS.
+        // Browser app constants
         const PASSWORD = '1234';
         const DEFAULT_HOME = 'https://www.google.com';
 
+        // Browser elements
         const lockEl = document.getElementById('lock');
         const browserEl = document.getElementById('browser');
         const passInput = document.getElementById('pass');
@@ -74,8 +144,9 @@
         const btnHome = document.getElementById('btn-home');
         const btnGo = document.getElementById('btn-go');
         const btnNew = document.getElementById('btn-newtab');
+        const btnChat = document.getElementById('btn-chat');
 
-        // history managed in parent so we can navigate cross-origin safely
+        // Simple history stack for iframe
         let historyStack = [];
         let historyIndex = -1;
 
@@ -104,7 +175,6 @@
         function sanitizeUrl(u){
             if(!u) return '';
             u = u.trim();
-            // if it's something like 'example.com' add https
             if(!/^https?:\/\//i.test(u)) u = 'https://' + u;
             try{ const parsed = new URL(u); return parsed.href; } catch(e){ return null; }
         }
@@ -112,7 +182,6 @@
         function goTo(raw, addToHistory = true){
             const u = sanitizeUrl(raw || '');
             if(!u){ status.textContent = 'هەڵە: URL دروست نییە'; return; }
-            // if adding to history, drop any forward history
             if(addToHistory){
                 historyStack = historyStack.slice(0, historyIndex+1);
                 historyStack.push(u);
@@ -124,12 +193,10 @@
 
         function setIframeSrc(u){
             status.innerHTML = '<span class="spinner"></span> بارکردن...';
-            // assign src — reloads content
             frame.src = u;
             urlInput.value = u;
         }
 
-        // Navigation using our history array (cannot access iframe internal history reliably cross-origin)
         function goBack(){ if(historyIndex > 0){ historyIndex--; setIframeSrc(historyStack[historyIndex]); updateControls(); } }
         function goForward(){ if(historyIndex < historyStack.length - 1){ historyIndex++; setIframeSrc(historyStack[historyIndex]); updateControls(); } }
         function reloadPage(){ if(historyIndex >= 0) setIframeSrc(historyStack[historyIndex]); else setIframeSrc(urlInput.value || DEFAULT_HOME); }
@@ -141,7 +208,6 @@
             btnForward.disabled = historyIndex >= historyStack.length - 1 || historyIndex === -1;
         }
 
-        // wire buttons
         btnGo.addEventListener('click', () => goTo(urlInput.value, true));
         btnBack.addEventListener('click', goBack);
         btnForward.addEventListener('click', goForward);
@@ -149,22 +215,129 @@
         btnHome.addEventListener('click', goHome);
         btnNew.addEventListener('click', openNewTab);
 
-        // enter key in url field
         urlInput.addEventListener('keydown', e => { if(e.key === 'Enter') goTo(urlInput.value, true); });
 
-        // update status when iframe loads or errors
         frame.addEventListener('load', () => {
             status.textContent = 'بەسەرکەوتوویی بارکرا';
-            // try to update url to current iframe location if same-origin
-            try{ const loc = frame.contentWindow.location.href; if(loc) urlInput.value = loc; } catch(e){ /* cross-origin — ignore */ }
+            try{ const loc = frame.contentWindow.location.href; if(loc) urlInput.value = loc; } catch(e){ }
             updateControls();
         });
 
-        // initial state
         updateControls();
-
-        // accessibility: if user presses Escape while locked, clear password
         document.addEventListener('keydown', e => { if(e.key === 'Escape' && lockEl.style.display !== 'none'){ passInput.value = ''; showLockError(''); } });
+
+        // -------------------- Chat (WebRTC P2P manual signaling) --------------------
+        const chatOverlay = document.getElementById('chatOverlay');
+        const chatClose = document.getElementById('chatClose');
+        const chatLang = document.getElementById('chatLang');
+        const chatInstr = document.getElementById('chatInstr');
+        const localOfferEl = document.getElementById('localOffer');
+        const remoteOfferEl = document.getElementById('remoteOffer');
+        const createOfferBtn = document.getElementById('createOffer');
+        const createAnswerBtn = document.getElementById('createAnswer');
+        const setRemoteBtn = document.getElementById('setRemote');
+        const exportStateBtn = document.getElementById('exportState');
+        const clearAllBtn = document.getElementById('clearAll');
+        const logEl = document.getElementById('log');
+        const sendBtn = document.getElementById('send');
+        const msgInput = document.getElementById('msg');
+        const connStatus = document.getElementById('connStatus');
+        const copyLogBtn = document.getElementById('copyLog');
+        const saveNameBtn = document.getElementById('saveName');
+        const chatTitle = document.getElementById('chatTitle');
+
+        // translations for chat UI
+        const T = {
+          ku: {
+            title: 'چات پێیر‑تو‑پێیر', instr: 'ئەم چاتە تەنها نێوان دوو براوسەر کاردەکات. Create Offer -> copy -> paste -> Set Remote -> Create Answer -> exchange',
+            createOffer: 'Create Offer', createAnswer: 'Create Answer', setRemote: 'Set Remote', send:'ناردن', clear:'سڕینەوە', export:'Export', status_idle:'idle', status_open:'connected', status_closed:'closed'
+          },
+          ar:{ title:'دردشة P2P', instr: 'الدردشة تعمل بين متصفحين فقط. Create Offer -> copy -> paste -> Set Remote -> Create Answer -> exchange', createOffer:'إنشاء العرض', createAnswer:'إنشاء الجواب', setRemote:'Set Remote', send:'إرسال', clear:'مسح', export:'Export', status_idle:'خامل', status_open:'متصل', status_closed:'مغلق' },
+          en:{ title:'P2P Chat', instr:'This chat runs in-browser between two peers. Create Offer -> copy -> paste -> Set Remote -> Create Answer -> exchange', createOffer:'Create Offer', createAnswer:'Create Answer', setRemote:'Set Remote', send:'Send', clear:'Clear', export:'Export', status_idle:'idle', status_open:'connected', status_closed:'closed' }
+        };
+
+        function applyChatLang(){
+          const l = chatLang.value || 'ku';
+          const t = T[l];
+          chatTitle.textContent = t.title;
+          chatInstr.textContent = t.instr;
+          createOfferBtn.textContent = t.createOffer;
+          createAnswerBtn.textContent = t.createAnswer;
+          setRemoteBtn.textContent = t.setRemote;
+          sendBtn.textContent = t.send;
+          clearAllBtn.textContent = t.clear + ' Chat';
+          exportStateBtn.textContent = t.export;
+          connStatus.textContent = t.status_idle;
+          // direction
+          if(l === 'ar' || l === 'ku'){ document.documentElement.dir = 'rtl'; } else { document.documentElement.dir = 'ltr'; }
+        }
+        chatLang.addEventListener('change', applyChatLang);
+        applyChatLang();
+
+        btnChat.addEventListener('click', ()=>{ chatOverlay.style.display = 'flex'; });
+        chatClose.addEventListener('click', ()=>{ chatOverlay.style.display = 'none'; });
+
+        // WebRTC
+        const pcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        let pc = null; let dc = null;
+
+        function ensurePC(){ if(pc) return; pc = new RTCPeerConnection(pcConfig);
+          pc.onicecandidate = e => { if(e.candidate){ const obj={type:'ice', candidate:e.candidate}; appendToLocal(JSON.stringify(obj)); } };
+          pc.ondatachannel = ev => { dc = ev.channel; setupDC(); };
+          pc.onconnectionstatechange = ()=>{ updateConnState(); };
+        }
+
+        function appendToLocal(text){ localOfferEl.value = (localOfferEl.value ? localOfferEl.value + '\n' : '') + text; }
+
+        createOfferBtn.addEventListener('click', async ()=>{
+          ensurePC();
+          dc = pc.createDataChannel('chat'); setupDC();
+          const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+          appendToLocal(JSON.stringify({ type:'sdp', sdp: pc.localDescription }));
+          connStatus.textContent = T[chatLang.value].status_idle;
+        });
+
+        createAnswerBtn.addEventListener('click', async ()=>{
+          if(!pc) ensurePC();
+          const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
+          appendToLocal(JSON.stringify({ type:'sdp', sdp: pc.localDescription }));
+        });
+
+        setRemoteBtn.addEventListener('click', async ()=>{
+          const text = remoteOfferEl.value.trim(); if(!text){ alert('paste remote data'); return; }
+          const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+          for(const line of lines){ try{ const obj = JSON.parse(line);
+              if(obj.type === 'sdp' && obj.sdp){ const desc = new RTCSessionDescription(obj.sdp); if(!pc) ensurePC(); await pc.setRemoteDescription(desc);
+                  if(desc.type === 'offer'){ const ans = await pc.createAnswer(); await pc.setLocalDescription(ans); appendToLocal(JSON.stringify({ type:'sdp', sdp: pc.localDescription })); }
+              } else if(obj.type === 'ice' && obj.candidate){ if(!pc) ensurePC(); try{ await pc.addIceCandidate(new RTCIceCandidate(obj.candidate)); }catch(e){ console.warn('ice add failed', e); } }
+            }catch(e){ console.warn('invalid line', e); }
+          }
+        });
+
+        function setupDC(){ if(!dc) return; dc.onopen = ()=>{ connStatus.textContent = T[chatLang.value].status_open; appendLog('datachannel open'); };
+          dc.onclose = ()=>{ connStatus.textContent = T[chatLang.value].status_closed; appendLog('datachannel closed'); };
+          dc.onmessage = e => appendLog('Peer: ' + e.data);
+        }
+
+        function appendLog(txt, who='peer'){ const d = document.createElement('div'); d.className = 'msg ' + (who==='me' ? 'me' : 'peer'); d.textContent = txt; logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; }
+
+        sendBtn.addEventListener('click', ()=>{ const v = msgInput.value.trim(); if(!v) return; if(dc && dc.readyState === 'open'){ dc.send(v); appendLog('Me: ' + v, 'me'); msgInput.value=''; } else alert('datachannel not open'); });
+
+        copyLogBtn.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(logEl.innerText); alert('copied'); }catch(e){ prompt('copy:', logEl.innerText); } });
+        saveNameBtn.addEventListener('click', ()=>{ localStorage.setItem('shatech_name', prompt('name', '') || 'anon'); alert('saved'); });
+        exportStateBtn.addEventListener('click', ()=>{ const data = localOfferEl.value; if(!data){ alert('nothing to export'); return; } const blob = new Blob([data], {type:'text/plain'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='p2p-sdp.txt'; a.click(); URL.revokeObjectURL(url); });
+        clearAllBtn.addEventListener('click', ()=>{ if(!confirm('Clear chat log?')) return; logEl.innerHTML=''; appendLog('chat cleared by user'); });
+
+        function updateConnState(){ if(!pc) return; connStatus.textContent = pc.connectionState; }
+
+        // small helpers
+        remoteOfferEl.addEventListener('paste', ()=>{ setTimeout(()=>{},50); });
+
+        // initial
+        applyChatLang();
+
+        // Accessibility: allow toggling chat with Ctrl+M
+        document.addEventListener('keydown', e=>{ if(e.ctrlKey && e.key.toLowerCase()==='m'){ chatOverlay.style.display = chatOverlay.style.display==='flex' ? 'none' : 'flex'; } });
 
     </script>
 </body>
