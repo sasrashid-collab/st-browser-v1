@@ -127,6 +127,9 @@
         const PASSWORD = '1234';
         const DEFAULT_HOME = 'https://www.google.com';
 
+        // Feature flag: disable chat by default so browser works normally
+        const ENABLE_CHAT = false; // set true to enable chat overlay
+
         // Browser elements
         const lockEl = document.getElementById('lock');
         const browserEl = document.getElementById('browser');
@@ -145,6 +148,9 @@
         const btnGo = document.getElementById('btn-go');
         const btnNew = document.getElementById('btn-newtab');
         const btnChat = document.getElementById('btn-chat');
+
+        // Hide chat button if feature disabled so browser UI is normal
+        if(!ENABLE_CHAT){ btnChat.style.display = 'none'; }
 
         // Simple history stack for iframe
         let historyStack = [];
@@ -227,6 +233,8 @@
         document.addEventListener('keydown', e => { if(e.key === 'Escape' && lockEl.style.display !== 'none'){ passInput.value = ''; showLockError(''); } });
 
         // -------------------- Chat (WebRTC P2P manual signaling) --------------------
+        // Chat functionality is behind ENABLE_CHAT flag. It is disabled by default so the browser works normally.
+        if(ENABLE_CHAT){
         const chatOverlay = document.getElementById('chatOverlay');
         const chatClose = document.getElementById('chatClose');
         const chatLang = document.getElementById('chatLang');
@@ -338,6 +346,7 @@
 
         // Accessibility: allow toggling chat with Ctrl+M
         document.addEventListener('keydown', e=>{ if(e.ctrlKey && e.key.toLowerCase()==='m'){ chatOverlay.style.display = chatOverlay.style.display==='flex' ? 'none' : 'flex'; } });
+        }
 
     </script>
 </body>
